@@ -55,6 +55,10 @@ class Action(Enum):
     EAST = (0, 1, 1)
     NORTH = (-1, 0, 1)
     SOUTH = (1, 0, 1)
+    NORTHWEST = (-1, -1, np.sqrt(2))  # Diagonal up-left
+    NORTHEAST = (-1, 1, np.sqrt(2))   # Diagonal up-right
+    SOUTHWEST = (1, -1, np.sqrt(2))   # Diagonal down-left
+    SOUTHEAST = (1, 1, np.sqrt(2))     # Diagonal down-right
 
     @property
     def cost(self):
@@ -84,6 +88,15 @@ def valid_actions(grid, current_node):
         valid_actions.remove(Action.WEST)
     if y + 1 > m or grid[x, y + 1] == 1:
         valid_actions.remove(Action.EAST)
+        # Check diagonal movements
+    if x - 1 >= 0 and y - 1 >= 0 and grid[x - 1, y - 1] != 1:  
+        valid_actions.append(Action.NORTHWEST)
+    if x - 1 >= 0 and y + 1 < m and grid[x - 1, y + 1] != 1:  
+        valid_actions.append(Action.NORTHEAST)
+    if x + 1 < n and y - 1 >= 0 and grid[x + 1, y - 1] != 1:  
+        valid_actions.append(Action.SOUTHWEST)
+    if x + 1 < n and y + 1 < m and grid[x + 1, y + 1] != 1: 
+        valid_actions.append(Action.SOUTHEAST)
 
     return valid_actions
 
@@ -143,4 +156,42 @@ def a_star(grid, h, start, goal):
 
 def heuristic(position, goal_position):
     return np.linalg.norm(np.array(position) - np.array(goal_position))
+
+def point(p):
+    return np.array([p[0], p[1], 1.])
+
+def collinearity_check(p1, p2, p3, epsilon=1e-6): 
+    collinear = False
+    # TODO: Create the matrix out of three points
+    # Add points as rows in a matrix
+    mat = np.vstack((point(p1), point(p2), point(p3)))
+    # TODO: Calculate the determinant of the matrix. 
+    det = np.linalg.det(mat)
+    # TODO: Set collinear to True if the determinant is less than epsilon
+    if det < epsilon:
+        collinear = True
+        
+    return collinear
+
+def prune_path(path):
+    if path is not None and len(path) > 2:
+        pruned_path = path.copy()  # Make a copy of the original path
+        i = 0  # Start index
+        
+        while i < len(pruned_path) - 2:
+            p1 = point(pruned_path[i])
+            p2 = point(pruned_path[i + 1])
+            p3 = point(pruned_path[i + 2])
+            
+            if collinearity_check(p1, p2, p3):
+                # Remove p2
+                pruned_path.pop(i + 1)  # Use pop to remove by index
+            else:
+                # Only increment if no point was removed
+                i += 1
+    else:
+        pruned_path = path  # Return original path if None or too short
+        
+    return pruned_path
+
 
