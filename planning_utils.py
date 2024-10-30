@@ -1,6 +1,7 @@
 from enum import Enum
 from queue import PriorityQueue
 import numpy as np
+import math
 
 
 def create_grid(data, drone_altitude, safety_distance):
@@ -20,8 +21,9 @@ def create_grid(data, drone_altitude, safety_distance):
 
     # given the minimum and maximum coordinates we can
     # calculate the size of the grid.
-    north_size = int(np.ceil(north_max - north_min))
-    east_size = int(np.ceil(east_max - east_min))
+    north_size = int(np.ceil((north_max - north_min + 1)))
+    east_size = int(np.ceil((east_max - east_min + 1)))
+    print(f"Grid size: {north_size} x {east_size}")
 
     # Initialize an empty grid
     grid = np.zeros((north_size, east_size))
@@ -55,10 +57,11 @@ class Action(Enum):
     EAST = (0, 1, 1)
     NORTH = (-1, 0, 1)
     SOUTH = (1, 0, 1)
-    NORTHWEST = (-1, -1, np.sqrt(2))  # Diagonal up-left
-    NORTHEAST = (-1, 1, np.sqrt(2))   # Diagonal up-right
-    SOUTHWEST = (1, -1, np.sqrt(2))   # Diagonal down-left
-    SOUTHEAST = (1, 1, np.sqrt(2))     # Diagonal down-right
+    
+    NORTH_WEST = (-1, -1, math.sqrt(2))
+    NORTH_EAST = (-1, 1, math.sqrt(2))
+    SOUTH_WEST = (1, -1, math.sqrt(2))
+    SOUTH_EAST = (1, 1, math.sqrt(2))
 
     @property
     def cost(self):
@@ -88,20 +91,24 @@ def valid_actions(grid, current_node):
         valid_actions.remove(Action.WEST)
     if y + 1 > m or grid[x, y + 1] == 1:
         valid_actions.remove(Action.EAST)
-        # Check diagonal movements
-    if x - 1 >= 0 and y - 1 >= 0 and grid[x - 1, y - 1] != 1:  
-        valid_actions.append(Action.NORTHWEST)
-    if x - 1 >= 0 and y + 1 < m and grid[x - 1, y + 1] != 1:  
-        valid_actions.append(Action.NORTHEAST)
-    if x + 1 < n and y - 1 >= 0 and grid[x + 1, y - 1] != 1:  
-        valid_actions.append(Action.SOUTHWEST)
-    if x + 1 < n and y + 1 < m and grid[x + 1, y + 1] != 1: 
-        valid_actions.append(Action.SOUTHEAST)
+        
+    if (x-1 < 0) or (y-1 < 0) or grid[x-1, y-1] == 1:
+        valid_actions.remove(Action.NORTH_WEST)
+    if (x-1 < 0) or (y+1 > m) or grid[x-1, y+1] == 1:
+        valid_actions.remove(Action.NORTH_EAST)
+    if (x+1 > n) or (y+1 > m) or grid[x+1, y+1] == 1:
+        valid_actions.remove(Action.SOUTH_EAST)
+    if (x+1 > n) or (y-1 < 0) or grid[x+1, y-1] == 1:
+        valid_actions.remove(Action.SOUTH_WEST)
 
     return valid_actions
 
 
 def a_star(grid, h, start, goal):
+    """
+    Given a grid and heuristic function returns
+    the lowest cost path from start to goal.
+    """
 
     path = []
     path_cost = 0
@@ -111,32 +118,40 @@ def a_star(grid, h, start, goal):
 
     branch = {}
     found = False
-    
+
     while not queue.empty():
         item = queue.get()
+        current_cost = item[0]
         current_node = item[1]
-        if current_node == start:
-            current_cost = 0.0
-        else:              
-            current_cost = branch[current_node][0]
-            
-        if current_node == goal:        
+
+        if current_node == goal:
             print('Found a path.')
             found = True
             break
         else:
+            # Get the new vertexes connected to the current vertex
+            # Iterate through all valid actions for the current node
             for action in valid_actions(grid, current_node):
-                # get the tuple representation
-                da = action.delta
-                next_node = (current_node[0] + da[0], current_node[1] + da[1])
-                branch_cost = current_cost + action.cost
-                queue_cost = branch_cost + h(next_node, goal)
-                
-                if next_node not in visited:                
-                    visited.add(next_node)               
-                    branch[next_node] = (branch_cost, current_node, action)
-                    queue.put((queue_cost, next_node))
-             
+                # Calculate the next node based on the current node and the action's delta
+                next_node = (current_node[0] + action.delta[0], current_node[1] + action.delta[1])
+
+                # Debug message to check if the next node has already been visited
+                if next_node in visited:
+                    continue  # Skip the rest of the loop for this action if the node is already visited
+
+                # Calculate the new cost for moving to the next node
+                new_cost = current_cost + action.cost + h(next_node, goal)
+
+                # Check if the next node has a lower cost than previously recorded
+                if next_node not in branch or new_cost < branch[next_node][0]:
+                    # Mark the next node as visited
+                    visited.add(next_node)
+                    # Add the new node and cost to the priority queue
+                    queue.put((new_cost, next_node))
+                    # Update the branch information with the new cost and current node details
+                    branch[next_node] = (new_cost, current_node, action)
+
+
     if found:
         # retrace steps
         n = goal
@@ -152,46 +167,29 @@ def a_star(grid, h, start, goal):
         print('**********************') 
     return path[::-1], path_cost
 
-
-
 def heuristic(position, goal_position):
     return np.linalg.norm(np.array(position) - np.array(goal_position))
 
 def point(p):
-    return np.array([p[0], p[1], 1.])
+    return np.array([p[0], p[1], 1.]).reshape(1, -1)
 
-def collinearity_check(p1, p2, p3, epsilon=1e-6): 
-    collinear = False
-    # TODO: Create the matrix out of three points
-    # Add points as rows in a matrix
-    mat = np.vstack((point(p1), point(p2), point(p3)))
-    # TODO: Calculate the determinant of the matrix. 
-    det = np.linalg.det(mat)
-    # TODO: Set collinear to True if the determinant is less than epsilon
-    if det < epsilon:
-        collinear = True
-        
-    return collinear
+def collinearity_check(p1, p2, p3, grid, epsilon=1e-6):
+    m = np.concatenate((p1, p2, p3), 0)
+    det = np.linalg.det(m)
+    return abs(det) < epsilon
 
-def prune_path(path):
-    if path is not None and len(path) > 2:
-        pruned_path = path.copy()  # Make a copy of the original path
-        i = 0  # Start index
+def prune_path(path, grid):
+    pruned_path = [p for p in path]
+    
+    i = 0
+    while i < (len(pruned_path) - 2):
+        p1 = point(pruned_path[i])
+        p2 = point(pruned_path[i+1])
+        p3 = point(pruned_path[i+2])
         
-        while i < len(pruned_path) - 2:
-            p1 = point(pruned_path[i])
-            p2 = point(pruned_path[i + 1])
-            p3 = point(pruned_path[i + 2])
-            
-            if collinearity_check(p1, p2, p3):
-                # Remove p2
-                pruned_path.pop(i + 1)  # Use pop to remove by index
-            else:
-                # Only increment if no point was removed
-                i += 1
-    else:
-        pruned_path = path  # Return original path if None or too short
-        
+        if collinearity_check(p1, p2, p3, grid):
+            pruned_path.remove(pruned_path[i+1])
+        else:
+            i +=1
     return pruned_path
-
-
+    
