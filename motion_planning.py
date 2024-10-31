@@ -150,7 +150,7 @@ class MotionPlanning(Drone):
        
         # TODO: convert start position to current position rather than map center
         grid_start = (int(current_local_pos[0] - north_offset), int(current_local_pos[1] - east_offset))
-        goal_offset_north = 75
+        goal_offset_north = 300
         goal_offset_east = 30
         goal_local = [current_local_pos[0] + goal_offset_north, current_local_pos[1] + goal_offset_east, TARGET_ALTITUDE + 20]
         

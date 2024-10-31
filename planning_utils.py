@@ -186,7 +186,7 @@ def prune_path(path, grid):
 """ Impelementing RRT* algorithm """
 
 class RRTStar:
-    def __init__(self, start, goal, grid, max_iter=1000, step_size=5, radius=4):
+    def __init__(self, start, goal, grid, max_iter=2000, step_size=5, radius=4):
         self.G = nx.Graph()
         self.G.add_node(start, pos=start, cost=0)
         self.start = start

@@ -71,3 +71,5 @@ The RRT* planner maintains a growing tree structure, continuously optimizing pat
 
 #### Results
 The algorithm successfully generates collision-free paths while maintaining the optimal balance between exploration and exploitation. 
+
+![RRT* Path](./misc/Figure_1.png)
