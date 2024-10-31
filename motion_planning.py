@@ -7,7 +7,8 @@ import numpy as np
 import csv
 import pandas as pd
 
-from planning_utils import a_star, heuristic, create_grid, prune_path
+from planning_utils import a_star, heuristic, create_grid, prune_path 
+from planning_utils import RRTStar
 from udacidrone import Drone
 from udacidrone.connection import MavlinkConnection
 from udacidrone.messaging import MsgID
@@ -120,7 +121,7 @@ class MotionPlanning(Drone):
         self.flight_state = States.PLANNING
         print("Searching for a path ...")
         TARGET_ALTITUDE = 5
-        SAFETY_DISTANCE = 5
+        SAFETY_DISTANCE = 0
 
         self.target_position[2] = TARGET_ALTITUDE
 
@@ -152,19 +153,41 @@ class MotionPlanning(Drone):
         # Define a grid for a particular altitude and safety margin around obstacles
         grid, north_offset, east_offset = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
        
-        plt.imshow(grid, origin='lower')
-        plt.xlabel('East')
-        plt.ylabel('North')
-        plt.title('Grid with Obstacles')
-        plt.show()
+  
         # TODO: convert start position to current position rather than map center
         grid_start = (int(current_local_pos[0] - north_offset), int(current_local_pos[1] - east_offset))
 
 
-        grid_goal = (-122.396582, 37.795714, 0)
-        grid_goal = global_to_local(grid_goal, self.global_home)
-        grid_goal = (int(grid_goal[0] - north_offset), int(grid_goal[1] - east_offset))
+        # grid_goal = (-122.396582, 37.795714, 0)
+        # grid_goal = global_to_local(grid_goal, self.global_home)
+        # grid_goal = (int(grid_goal[0] - north_offset), int(grid_goal[1] - east_offset))
         
+        # Set goal position closer to the start, e.g., 10m north and 10m east
+        goal_offset_north = 75
+        goal_offset_east = 30
+        goal_local = [current_local_pos[0] + goal_offset_north, current_local_pos[1] + goal_offset_east, TARGET_ALTITUDE + 20]
+        
+        # Convert local goal to grid coordinates
+        grid_goal = (int(goal_local[0] - north_offset), int(goal_local[1] - east_offset))
+
+        if grid[grid_goal[0], grid_goal[1]] == 1:
+            print("Goal is in a collision area. Finding nearest non-collision point.")
+            found = False
+            for i in range(-5, 6):
+                for j in range(-5, 6):
+                    if grid[grid_goal[0] + i, grid_goal[1] + j] == 0:
+                        grid_goal = (grid_goal[0] + i, grid_goal[1] + j)
+                        found = True
+                        print("Adjusted goal position to nearest free space:", grid_goal)
+                        break
+                if found:
+                    break
+            if not found:
+                print("Failed to find a free space for goal within search range.")
+                return
+
+
+        print('Local Start and Goal:', grid_start, grid_goal)
 
         
         # TODO: adapt to set goal as latitude / longitude position and convert
@@ -174,17 +197,23 @@ class MotionPlanning(Drone):
         # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
         # or move to a different search space such as a graph (not done here)
         print('Local Start and Goal: ', grid_start, grid_goal)
-        path, _ = a_star(grid, heuristic, grid_start, grid_goal)
+        # path, _ = a_star(grid, heuristic, grid_start, grid_goal)
+          # Run RRT to find a path from start to goal
+        rrt_star = RRTStar(grid_start, grid_goal, grid)
+        path = rrt_star.plan()
         
         # TODO: prune path to minimize number of waypoints
         # TODO (if you're feeling ambitious): Try a different approach altogether!
-        path = prune_path(path, grid)
+        # path = prune_path(path, grid)
 
         # Convert path to waypoints
         waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in path]
         # Set self.waypoints
         self.waypoints = waypoints
+        print('Waypoints: ', waypoints)
+        
         # TODO: send waypoints to sim
+        
         self.send_waypoints()
 
     def start(self):
@@ -206,7 +235,7 @@ if __name__ == "__main__":
     parser.add_argument('--host', type=str, default='127.0.0.1', help="host address, i.e. '127.0.0.1'")
     args = parser.parse_args()
 
-    conn = MavlinkConnection('tcp:{0}:{1}'.format(args.host, args.port), timeout=60)
+    conn = MavlinkConnection('tcp:{0}:{1}'.format(args.host, args.port), timeout=10000)
     drone = MotionPlanning(conn)
     time.sleep(1)
 

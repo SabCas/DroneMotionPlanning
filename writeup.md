@@ -24,3 +24,50 @@ This file contains essential utilities for path planning:
 ### Conclusion
 
 Together, `motion_planning.py` and `planning_utils.py` enable the drone to navigate its environment safely and efficiently by identifying obstacles, determining valid movements, and finding optimal paths to desired locations.
+
+## RRT* Path Planning Implementation
+### Overview
+I implemented RRT* (Rapidly-exploring Random Tree Star) as an advanced motion planning algorithm that generates optimal paths while efficiently exploring the configuration space. The implementation builds on the core RRT concept by adding cost optimization and tree rewiring capabilities.
+
+#### Key Components
+The Node class tracks positions, parent relationships, and accumulated path costs - essential for RRT*'s optimization features. 
+Node Structure
+```python	
+class Node:
+    def __init__(self, point, parent=None):
+        self.point = point
+        self.parent = parent
+        self.cost = 0
+```
+
+
+
+#### Core Algorithm Features
+1. **Intelligent Sampling**
+   - Random point generation across configuration space
+   - 5% goal bias for efficient goal-directed exploration
+
+2. **Tree Growth**
+   - Nearest neighbor search
+   - Controlled node expansion using step_size parameter
+   - Collision checking for obstacle avoidance
+
+3. **Path Optimization**
+   - Near-neighbor radius search
+   - Cost-based parent selection
+   - Dynamic tree rewiring for path improvement
+
+4. **Goal Connection**
+   - Goal proximity checking
+   - Path retracing from goal to start
+
+#### Technical Implementation
+The RRT* planner maintains a growing tree structure, continuously optimizing paths as new nodes are added. The implementation ensures:
+
+- Probabilistic completeness
+-  Asymptotic optimality
+- Efficient space exploration
+- Smooth path generation
+
+#### Results
+The algorithm successfully generates collision-free paths while maintaining the optimal balance between exploration and exploitation. 

@@ -2,6 +2,9 @@ from enum import Enum
 from queue import PriorityQueue
 import numpy as np
 import math
+import matplotlib.pyplot as plt
+from scipy.spatial import cKDTree
+import networkx as nx
 
 
 def create_grid(data, drone_altitude, safety_distance):
@@ -105,53 +108,39 @@ def valid_actions(grid, current_node):
 
 
 def a_star(grid, h, start, goal):
-    """
-    Given a grid and heuristic function returns
-    the lowest cost path from start to goal.
-    """
-
     path = []
     path_cost = 0
     queue = PriorityQueue()
     queue.put((0, start))
     visited = set(start)
-
     branch = {}
     found = False
-
+    
     while not queue.empty():
         item = queue.get()
-        current_cost = item[0]
         current_node = item[1]
-
-        if current_node == goal:
+        if current_node == start:
+            current_cost = 0.0
+        else:              
+            current_cost = branch[current_node][0]
+            
+        if current_node == goal:        
             print('Found a path.')
             found = True
             break
         else:
-            # Get the new vertexes connected to the current vertex
-            # Iterate through all valid actions for the current node
             for action in valid_actions(grid, current_node):
-                # Calculate the next node based on the current node and the action's delta
-                next_node = (current_node[0] + action.delta[0], current_node[1] + action.delta[1])
-
-                # Debug message to check if the next node has already been visited
-                if next_node in visited:
-                    continue  # Skip the rest of the loop for this action if the node is already visited
-
-                # Calculate the new cost for moving to the next node
-                new_cost = current_cost + action.cost + h(next_node, goal)
-
-                # Check if the next node has a lower cost than previously recorded
-                if next_node not in branch or new_cost < branch[next_node][0]:
-                    # Mark the next node as visited
-                    visited.add(next_node)
-                    # Add the new node and cost to the priority queue
-                    queue.put((new_cost, next_node))
-                    # Update the branch information with the new cost and current node details
-                    branch[next_node] = (new_cost, current_node, action)
-
-
+                # get the tuple representation
+                da = action.delta
+                next_node = (current_node[0] + da[0], current_node[1] + da[1])
+                branch_cost = current_cost + action.cost
+                queue_cost = branch_cost + h(next_node, goal)
+                
+                if next_node not in visited:                
+                    visited.add(next_node)               
+                    branch[next_node] = (branch_cost, current_node, action)
+                    queue.put((queue_cost, next_node))
+             
     if found:
         # retrace steps
         n = goal
@@ -169,7 +158,6 @@ def a_star(grid, h, start, goal):
 
 def heuristic(position, goal_position):
     return np.linalg.norm(np.array(position) - np.array(goal_position))
-
 def point(p):
     return np.array([p[0], p[1], 1.]).reshape(1, -1)
 
@@ -192,4 +180,172 @@ def prune_path(path, grid):
         else:
             i +=1
     return pruned_path
+
+
+
+
+# implemeent RRT
+
+import numpy as np
+import matplotlib.pyplot as plt
+import math
+import random
+
+class Node:
+    """
+    A node in the RRT tree.
+    
+    Attributes:
+        point (tuple): The (x, y) coordinates of the node.
+        parent (Node): The parent node in the RRT tree, or None if this is the root node.
+        cost (float): The cost to reach this node from the start.
+    """
+    def __init__(self, point, parent=None):
+        self.point = point
+        self.parent = parent
+        self.cost = 0
+
+class RRTStar:
+    def __init__(self, start, goal, grid, max_iter=1000, step_size=5, radius=4):
+        self.start = Node(start)
+        self.goal = Node(goal)
+        self.grid = grid  
+        self.max_iter = max_iter
+        self.step_size = step_size
+        self.radius = radius
+        self.tree = [self.start]
+
+    def plan(self):
+        """
+        Implements the planning algorithm for the RRT* algorithm.
+        
+        This method generates a random point, finds the nearest node in the tree to that point,
+        and creates a new node in the direction of the random point.
+        It then checks for collisions and updates the tree with the new node if there are no collisions. 
+        This process is repeated for the maximum number of iterations specified.
+        
+        Finally, the method retraces the path from the goal node back to the start node and returns the path.
+        """
+        for _ in range(self.max_iter):
+            rand_point = self.random_sample()  # Generate a random point
+            nearest_node = self.nearest_node(rand_point)  # Find nearest node
+            new_node = self.steer(nearest_node, rand_point)  # Steer towards random point
+
+            if self.check_collision(nearest_node, new_node):  # Check for collision
+                near_nodes = self.get_near_nodes(new_node)  # Get nearby nodes
+                new_node.cost = nearest_node.cost + self.distance(nearest_node.point, new_node.point)
+
+                for near_node in near_nodes:
+                    if self.check_collision(near_node, new_node):
+                        potential_cost = near_node.cost + self.distance(near_node.point, new_node.point)
+                        if potential_cost < new_node.cost:
+                            new_node.parent = near_node
+                            new_node.cost = potential_cost
+
+                self.tree.append(new_node)
+                self.rewire(new_node, near_nodes)
+                print(f"New node added at {new_node.point}")
+                
+
+                # Check if the new node is close enough to the goal
+                if self.distance(new_node.point, self.goal.point) < self.step_size:
+                    
+                    self.goal.parent = new_node  # Connect goal node to new node
+                    self.goal.cost = new_node.cost + self.distance(new_node.point, self.goal.point)
+                    self.tree.append(self.goal)  # add the goal to the tree
+                    print(f"Goal node connected at {self.goal.point}")
+                    break  # Stop if the goal is reached
+
+        return self.retrace_path()  
+
+            
+
+
+    def random_sample(self):
+        """Generate a random point with bias to goal"""
+        if random.random() < 0.05:  # 5% chance to select goal
+            return self.goal.point
+        return (random.randint(0, self.grid.shape[0] - 1), 
+                random.randint(0, self.grid.shape[1] - 1))
+
+    def nearest_node(self, point):
+        """Find the nearest node in the tree to the random point."""
+        return min(self.tree, key=lambda node: self.distance(node.point, point))
+
+    def steer(self, from_node, to_point):
+        """Generate a new node in the direction of the random point."""
+        direction = np.array(to_point) - np.array(from_node.point)
+        length = np.linalg.norm(direction)
+        if length > self.step_size:
+            direction = (direction / length) * self.step_size
+        new_point = (from_node.point[0] + direction[0], from_node.point[1] + direction[1])
+        return Node(new_point, parent=from_node)
+
+    def check_collision(self, from_node, to_node):
+        """Check for collision between the nodes."""
+        return not self.line_intersects_obstacle(from_node.point, to_node.point)
+    def line_intersects_obstacle(self, from_point, to_point):
+        """
+        Check if the line from the start point to the end point intersects any obstacles in the grid.
+    
+        Args:
+            start (tuple): The starting point of the line, represented as a (x, y) tuple.
+            end (tuple): The ending point of the line, represented as a (x, y) tuple.
+    
+        Returns:
+            bool: True if the line intersects an obstacle, False otherwise.
+        """
+
+        x0, y0 = from_point
+        x1, y1 = to_point
+        dx = x1 - x0
+        dy = y1 - y0
+
+        # Convert steps to integer
+        steps = int(max(abs(dx), abs(dy)))
+        if steps == 0:
+            return False
+    
+        for i in range(steps + 1):
+            x = int(x0 + (dx * i / steps))
+            y = int(y0 + (dy * i / steps))
+
+            if self.is_in_obstacle(x, y):
+                return True  # Collision detected
+
+        return False  
+
+    def get_near_nodes(self, new_node):
+        """Find nodes that are within the radius of the new node."""
+        return [node for node in self.tree if self.distance(node.point, new_node.point) < self.radius]
+
+    def retrace_path(self):
+        """Retrace the path."""
+        path = []
+        current_node = self.goal
+        while current_node is not None:
+            path.append(current_node.point)
+            current_node = current_node.parent
+        return path[::-1]
+
+    def distance(self, point1, point2):
+        return np.linalg.norm(np.array(point1) - np.array(point2))
+    
+    def is_in_obstacle(self, x, y):
+        """Check if point is in obstacle"""
+        if x < 0 or x >= self.grid.shape[0] or y < 0 or y >= self.grid.shape[1]:
+            return True
+        return self.grid[int(x), int(y)] == 1
+    
+    def rewire(self, new_node, near_nodes):
+        """Rewire the tree through new_node if it provides better paths"""
+        for near_node in near_nodes:
+            potential_cost = new_node.cost + self.distance(new_node.point, near_node.point)
+            if potential_cost < near_node.cost and self.check_collision(new_node, near_node):
+                near_node.parent = new_node
+                near_node.cost = potential_cost
+
+
+
+                                    
     
