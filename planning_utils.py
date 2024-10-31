@@ -244,7 +244,6 @@ class RRTStar:
 
                 self.tree.append(new_node)
                 self.rewire(new_node, near_nodes)
-                print(f"New node added at {new_node.point}")
                 
 
                 # Check if the new node is close enough to the goal

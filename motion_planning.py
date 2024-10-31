@@ -135,11 +135,6 @@ class MotionPlanning(Drone):
         
         # TODO: set home position to (lat0, lon0, 0)
         self.set_home_position(lon0, lat0, 0)
-
-        # TODO: retrieve current global position
-        # global_position = self.global_position
- 
-        # TODO: convert to current local position using global_to_local()
         current_local_pos = global_to_local(self.global_position, self.global_home)
         
         # Me: checking current local position
@@ -153,16 +148,8 @@ class MotionPlanning(Drone):
         # Define a grid for a particular altitude and safety margin around obstacles
         grid, north_offset, east_offset = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
        
-  
         # TODO: convert start position to current position rather than map center
         grid_start = (int(current_local_pos[0] - north_offset), int(current_local_pos[1] - east_offset))
-
-
-        # grid_goal = (-122.396582, 37.795714, 0)
-        # grid_goal = global_to_local(grid_goal, self.global_home)
-        # grid_goal = (int(grid_goal[0] - north_offset), int(grid_goal[1] - east_offset))
-        
-        # Set goal position closer to the start, e.g., 10m north and 10m east
         goal_offset_north = 75
         goal_offset_east = 30
         goal_local = [current_local_pos[0] + goal_offset_north, current_local_pos[1] + goal_offset_east, TARGET_ALTITUDE + 20]
@@ -189,21 +176,11 @@ class MotionPlanning(Drone):
 
         print('Local Start and Goal:', grid_start, grid_goal)
 
-        
-        # TODO: adapt to set goal as latitude / longitude position and convert
-        # grid_goal = local_to_global(grid_goal)
-
-        # Run A* to find a path from start to goal
-        # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
-        # or move to a different search space such as a graph (not done here)
         print('Local Start and Goal: ', grid_start, grid_goal)
         # path, _ = a_star(grid, heuristic, grid_start, grid_goal)
           # Run RRT to find a path from start to goal
         rrt_star = RRTStar(grid_start, grid_goal, grid)
         path = rrt_star.plan()
-        
-        # TODO: prune path to minimize number of waypoints
-        # TODO (if you're feeling ambitious): Try a different approach altogether!
         # path = prune_path(path, grid)
 
         # Convert path to waypoints
@@ -211,9 +188,6 @@ class MotionPlanning(Drone):
         # Set self.waypoints
         self.waypoints = waypoints
         print('Waypoints: ', waypoints)
-        
-        # TODO: send waypoints to sim
-        
         self.send_waypoints()
 
     def start(self):
@@ -221,11 +195,6 @@ class MotionPlanning(Drone):
 
         print("starting connection")
         self.connection.start()
-
-        # Only required if they do threaded
-        # while self.in_mission:
-        #    pass
-
         self.stop_log()
 
 
