@@ -2,9 +2,9 @@ from enum import Enum
 from queue import PriorityQueue
 import numpy as np
 import math
-import matplotlib.pyplot as plt
-from scipy.spatial import cKDTree
-import networkx as nx
+import numpy as np
+import math
+import random
 
 
 def create_grid(data, drone_altitude, safety_distance):
@@ -183,13 +183,7 @@ def prune_path(path, grid):
 
 
 
-
-# implemeent RRT
-
-import numpy as np
-import matplotlib.pyplot as plt
-import math
-import random
+""" Impelementing RRT* algorithm """
 
 class Node:
     """
