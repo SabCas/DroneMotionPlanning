@@ -3,6 +3,8 @@ from queue import PriorityQueue
 import numpy as np
 import math
 import random
+import networkx as nx
+from matplotlib import pyplot as plt
 
 
 def create_grid(data, drone_altitude, safety_distance):
@@ -183,116 +185,104 @@ def prune_path(path, grid):
 
 """ Impelementing RRT* algorithm """
 
-class Node:
-    """
-    A node in the RRT tree.
-    
-    Attributes:
-        point (tuple): The (x, y) coordinates of the node.
-        parent (Node): The parent node in the RRT tree, or None if this is the root node.
-        cost (float): The cost to reach this node from the start.
-    """
-    def __init__(self, point, parent=None):
-        self.point = point
-        self.parent = parent
-        self.cost = 0
-
 class RRTStar:
     def __init__(self, start, goal, grid, max_iter=1000, step_size=5, radius=4):
-        self.start = Node(start)
-        self.goal = Node(goal)
-        self.grid = grid  
+        self.G = nx.Graph()
+        self.G.add_node(start, pos=start, cost=0)
+        self.start = start
+        self.goal = goal
+        self.grid = grid
         self.max_iter = max_iter
         self.step_size = step_size
         self.radius = radius
-        self.tree = [self.start]
 
     def plan(self):
-        """
-        Implements the planning algorithm for the RRT* algorithm.
-        
-        This method generates a random point, finds the nearest node in the tree to that point,
-        and creates a new node in the direction of the random point.
-        It then checks for collisions and updates the tree with the new node if there are no collisions. 
-        This process is repeated for the maximum number of iterations specified.
-        
-        Finally, the method retraces the path from the goal node back to the start node and returns the path.
-        """
         for _ in range(self.max_iter):
-            rand_point = self.random_sample()  # Generate a random point
-            nearest_node = self.nearest_node(rand_point)  # Find nearest node
-            new_node = self.steer(nearest_node, rand_point)  # Steer towards random point
+            rand_point = self.random_sample()
+            nearest_node = min(self.G.nodes(), 
+                key=lambda n: self.distance(self.G.nodes[n]['pos'], rand_point))
+            new_point = self.steer(self.G.nodes[nearest_node]['pos'], rand_point)
 
-            if self.check_collision(nearest_node, new_node):  # Check for collision
-                near_nodes = self.get_near_nodes(new_node)  # Get nearby nodes
-                new_node.cost = nearest_node.cost + self.distance(nearest_node.point, new_node.point)
-
-                for near_node in near_nodes:
-                    if self.check_collision(near_node, new_node):
-                        potential_cost = near_node.cost + self.distance(near_node.point, new_node.point)
-                        if potential_cost < new_node.cost:
-                            new_node.parent = near_node
-                            new_node.cost = potential_cost
-
-                self.tree.append(new_node)
-                self.rewire(new_node, near_nodes)
+            if self.check_collision(self.G.nodes[nearest_node]['pos'], new_point):
+                # Find nearby nodes
+                near_nodes = [n for n in self.G.nodes() 
+                    if self.distance(self.G.nodes[n]['pos'], new_point) < self.radius]
                 
+                # Find best parent
+                min_cost = float('inf')
+                best_parent = nearest_node
+                for near_node in near_nodes:
+                    potential_cost = (self.G.nodes[near_node]['cost'] + 
+                                   self.distance(self.G.nodes[near_node]['pos'], new_point))
+                    if potential_cost < min_cost and self.check_collision(self.G.nodes[near_node]['pos'], new_point):
+                        min_cost = potential_cost
+                        best_parent = near_node
 
-                # Check if the new node is close enough to the goal
-                if self.distance(new_node.point, self.goal.point) < self.step_size:
-                    
-                    self.goal.parent = new_node  # Connect goal node to new node
-                    self.goal.cost = new_node.cost + self.distance(new_node.point, self.goal.point)
-                    self.tree.append(self.goal)  # add the goal to the tree
-                    print(f"Goal node connected at {self.goal.point}")
-                    break  # Stop if the goal is reached
+                # Add new node
+                self.G.add_node(new_point, pos=new_point, cost=min_cost)
+                self.G.add_edge(best_parent, new_point, 
+                    weight=self.distance(self.G.nodes[best_parent]['pos'], new_point))
 
-        return self.retrace_path()  
+                # Rewire
+                for near_node in near_nodes:
+                    potential_cost = (min_cost + 
+                        self.distance(new_point, self.G.nodes[near_node]['pos']))
+                    if potential_cost < self.G.nodes[near_node]['cost'] and self.check_collision(new_point, self.G.nodes[near_node]['pos']):
+                        old_parent = list(self.G.predecessors(near_node))[0]
+                        self.G.remove_edge(old_parent, near_node)
+                        self.G.add_edge(new_point, near_node, 
+                            weight=self.distance(new_point, self.G.nodes[near_node]['pos']))
+                        self.G.nodes[near_node]['cost'] = potential_cost
 
-            
+                if self.distance(new_point, self.goal) < self.step_size:
+                    self.G.add_node(self.goal, pos=self.goal, 
+                        cost=min_cost + self.distance(new_point, self.goal))
+                    self.G.add_edge(new_point, self.goal, 
+                        weight=self.distance(new_point, self.goal))
+                    print(f"Goal node connected at {self.goal}")
+                    break
 
+        if self.goal in self.G:
+            return nx.shortest_path(self.G, list(self.G.nodes())[0], self.goal)
+    
 
     def random_sample(self):
         """Generate a random point with bias to goal"""
         if random.random() < 0.05:  # 5% chance to select goal
-            return self.goal.point
-        return (random.randint(0, self.grid.shape[0] - 1), 
+            return self.goal
+        return (random.randint(0, self.grid.shape[0] - 1),
                 random.randint(0, self.grid.shape[1] - 1))
+
 
     def nearest_node(self, point):
         """Find the nearest node in the tree to the random point."""
         return min(self.tree, key=lambda node: self.distance(node.point, point))
 
-    def steer(self, from_node, to_point):
-        """Generate a new node in the direction of the random point."""
-        direction = np.array(to_point) - np.array(from_node.point)
+    def steer(self, from_pos, to_pos):
+        """Generate a new position in the direction of the random position."""
+        direction = np.array(to_pos) - np.array(from_pos)
         length = np.linalg.norm(direction)
+        
         if length > self.step_size:
             direction = (direction / length) * self.step_size
-        new_point = (from_node.point[0] + direction[0], from_node.point[1] + direction[1])
-        return Node(new_point, parent=from_node)
+        
+        new_pos = (from_pos[0] + direction[0], from_pos[1] + direction[1])
+        return new_pos
 
-    def check_collision(self, from_node, to_node):
-        """Check for collision between the nodes."""
-        return not self.line_intersects_obstacle(from_node.point, to_node.point)
+
+    def check_collision(self, from_pos, to_pos):
+        return not self.line_intersects_obstacle(from_pos, to_pos)
+
     def line_intersects_obstacle(self, from_point, to_point):
         """
         Check if the line from the start point to the end point intersects any obstacles in the grid.
-    
-        Args:
-            start (tuple): The starting point of the line, represented as a (x, y) tuple.
-            end (tuple): The ending point of the line, represented as a (x, y) tuple.
-    
-        Returns:
-            bool: True if the line intersects an obstacle, False otherwise.
-        """
 
+        """
         x0, y0 = from_point
         x1, y1 = to_point
         dx = x1 - x0
         dy = y1 - y0
 
-        # Convert steps to integer
         steps = int(max(abs(dx), abs(dy)))
         if steps == 0:
             return False
@@ -306,19 +296,6 @@ class RRTStar:
 
         return False  
 
-    def get_near_nodes(self, new_node):
-        """Find nodes that are within the radius of the new node."""
-        return [node for node in self.tree if self.distance(node.point, new_node.point) < self.radius]
-
-    def retrace_path(self):
-        """Retrace the path."""
-        path = []
-        current_node = self.goal
-        while current_node is not None:
-            path.append(current_node.point)
-            current_node = current_node.parent
-        return path[::-1]
-
     def distance(self, point1, point2):
         return np.linalg.norm(np.array(point1) - np.array(point2))
     
@@ -328,15 +305,35 @@ class RRTStar:
             return True
         return self.grid[int(x), int(y)] == 1
     
-    def rewire(self, new_node, near_nodes):
-        """Rewire the tree through new_node if it provides better paths"""
-        for near_node in near_nodes:
-            potential_cost = new_node.cost + self.distance(new_node.point, near_node.point)
-            if potential_cost < near_node.cost and self.check_collision(new_node, near_node):
-                near_node.parent = new_node
-                near_node.cost = potential_cost
+
+    def plot_graph(self):
+        plt.figure(figsize=(12, 12))
+        pos = {node: (self.G.nodes[node]['pos'][1], self.G.nodes[node]['pos'][0]) for node in self.G.nodes()}
+        
+        # Draw grid and full tree
+        plt.imshow(self.grid, origin='lower')
+        nx.draw(self.G, pos, node_size=20, node_color='b', edge_color='g', alpha=0.3)
+        
+        # Draw optimal path in red with thicker lines
+        path = nx.shortest_path(self.G, self.start, self.goal)
+        path_edges = list(zip(path[:-1], path[1:]))
+        nx.draw_networkx_edges(self.G, pos, edgelist=path_edges, edge_color='r', width=2)
+        
+        # Draw start and goal
+        start_pos = (self.start[1], self.start[0])
+        goal_pos = (self.goal[1], self.goal[0])
+        plt.plot(start_pos[0], start_pos[1], 'go', markersize=15, label='Start')
+        plt.plot(goal_pos[0], goal_pos[1], 'ro', markersize=15, label='Goal')
+        
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+
+        
 
 
 
-                                    
-    
+
+                                        
+        

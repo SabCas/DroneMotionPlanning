@@ -181,6 +181,7 @@ class MotionPlanning(Drone):
           # Run RRT to find a path from start to goal
         rrt_star = RRTStar(grid_start, grid_goal, grid)
         path = rrt_star.plan()
+        rrt_star.plot_graph()
         # path = prune_path(path, grid)
 
         # Convert path to waypoints
