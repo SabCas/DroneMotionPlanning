@@ -2,8 +2,6 @@ from enum import Enum
 from queue import PriorityQueue
 import numpy as np
 import math
-import numpy as np
-import math
 import random
 
 
