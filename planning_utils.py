@@ -4,6 +4,7 @@ import numpy as np
 import math
 import random
 import networkx as nx
+from bresenham import bresenham
 from matplotlib import pyplot as plt
 
 
@@ -182,11 +183,43 @@ def prune_path(path, grid):
     return pruned_path
 
 
+def bresenham_prune(path, grid):
+    """
+    Use the Bresenham module to trim uneeded waypoints from path
+    """
+    pruned_path = [p for p in path]
+    i = 0
+    while i < len(pruned_path) - 2:
+        p1 = pruned_path[i]
+        p2 = pruned_path[i + 1]
+        p3 = pruned_path[i + 2]
+        # Modify the line in planning_utils.py to unpack the tuple
+        # Another way to handle the grid indexing
+        # For grid checking, use this syntax:
+        if all(grid[x][y] == 0 for x, y in bresenham(int(p1[0]), int(p1[1]), int(p3[0]), int(p3[1]))):
+
+
+
+            pruned_path.remove(p2)
+
+        else:
+            i += 1
+    return pruned_path
+
+def get_coordinates_file(input_file):
+    """Get latitude/longitude data from first line of input file."""
+    with open(input_file) as f:
+        parts = f.readline().replace(',', '').split()
+        lat = float(parts[1])
+        lon = float(parts[3])
+
+        return lat, lon
+
 
 """ Impelementing RRT* algorithm """
 
 class RRTStar:
-    def __init__(self, start, goal, grid, max_iter=2000, step_size=5, radius=4):
+    def __init__(self, start, goal, grid, max_iter=2000, step_size=10, radius=15):
         self.G = nx.Graph()
         self.G.add_node(start, pos=start, cost=0)
         self.start = start
@@ -228,7 +261,7 @@ class RRTStar:
                     potential_cost = (min_cost + 
                         self.distance(new_point, self.G.nodes[near_node]['pos']))
                     if potential_cost < self.G.nodes[near_node]['cost'] and self.check_collision(new_point, self.G.nodes[near_node]['pos']):
-                        old_parent = list(self.G.predecessors(near_node))[0]
+                        old_parent = list(self.G.neighbors(near_node))[0]
                         self.G.remove_edge(old_parent, near_node)
                         self.G.add_edge(new_point, near_node, 
                             weight=self.distance(new_point, self.G.nodes[near_node]['pos']))
@@ -304,6 +337,9 @@ class RRTStar:
         if x < 0 or x >= self.grid.shape[0] or y < 0 or y >= self.grid.shape[1]:
             return True
         return self.grid[int(x), int(y)] == 1
+    
+
+   
     
 
     def plot_graph(self):

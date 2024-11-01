@@ -4,10 +4,9 @@ import msgpack
 from enum import Enum, auto
 
 import numpy as np
-import csv
-import pandas as pd
 
-from planning_utils import a_star, heuristic, create_grid, prune_path 
+
+from planning_utils import a_star, heuristic, create_grid, prune_path, bresenham_prune, get_coordinates_file
 from planning_utils import RRTStar
 from udacidrone import Drone
 from udacidrone.connection import MavlinkConnection
@@ -126,10 +125,7 @@ class MotionPlanning(Drone):
         self.target_position[2] = TARGET_ALTITUDE
 
         # TODO: read lat0, lon0 from colliders into floating point values
-        lat0_lon0 = pd.read_csv('colliders.csv', nrows = 1, header = None)
-        lat0, lon0 = lat0_lon0.iloc[0,0], lat0_lon0.iloc[0,1]
-        _, lat0 = lat0.split()
-        _, lon0 = lon0.split()
+        lat0, lon0 = get_coordinates_file('colliders.csv')	
         lat0 = np.float64(lat0)
         lon0 = np.float64(lon0)
         
@@ -181,7 +177,8 @@ class MotionPlanning(Drone):
           # Run RRT to find a path from start to goal
         rrt_star = RRTStar(grid_start, grid_goal, grid)
         path = rrt_star.plan()
-        rrt_star.plot_graph()
+        path = bresenham_prune(path, grid)
+        #rrt_star.plot_graph()
         # path = prune_path(path, grid)
 
         # Convert path to waypoints
