@@ -30,16 +30,6 @@ Together, `motion_planning.py` and `planning_utils.py` enable the drone to navig
 I implemented RRT* (Rapidly-exploring Random Tree Star) as an advanced motion planning algorithm that generates optimal paths while efficiently exploring the configuration space. The implementation builds on the core RRT concept by adding cost optimization and tree rewiring capabilities.
 
 #### Key Components
-The Node class tracks positions, parent relationships, and accumulated path costs - essential for RRT*'s optimization features. 
-Node Structure
-```python	
-class Node:
-    def __init__(self, point, parent=None):
-        self.point = point
-        self.parent = parent
-        self.cost = 0
-```
-
 
 
 #### Core Algorithm Features
