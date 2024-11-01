@@ -214,6 +214,26 @@ def get_coordinates_file(input_file):
         lon = float(parts[3])
 
         return lat, lon
+    
+def plot_waypoints(grid, waypoints, north_offset, east_offset):
+    plt.imshow(grid, origin='lower')
+    
+    # Convert waypoints back to grid coordinates
+    grid_waypoints = [(int(wp[0] - north_offset), int(wp[1] - east_offset)) for wp in waypoints]
+    
+    # Plot waypoints
+    waypoints_x = [wp[0] for wp in grid_waypoints]
+    waypoints_y = [wp[1] for wp in grid_waypoints]
+    plt.plot(waypoints_y, waypoints_x, 'r-*', linewidth=2, markersize=10)
+    
+    # Plot start and goal points
+    plt.plot(waypoints_y[0], waypoints_x[0], 'go', markersize=15, label='Start')
+    plt.plot(waypoints_y[-1], waypoints_x[-1], 'ro', markersize=15, label='Goal')
+    
+    plt.legend()
+    plt.grid(True)
+    plt.title('Planned Path with Waypoints')
+    plt.show()
 
 
 """ Impelementing RRT* algorithm """

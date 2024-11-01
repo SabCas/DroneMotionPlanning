@@ -6,7 +6,7 @@ from enum import Enum, auto
 import numpy as np
 
 
-from planning_utils import a_star, heuristic, create_grid, prune_path, bresenham_prune, get_coordinates_file
+from planning_utils import a_star, heuristic, create_grid, prune_path, bresenham_prune, get_coordinates_file, plot_waypoints
 from planning_utils import RRTStar
 from udacidrone import Drone
 from udacidrone.connection import MavlinkConnection
@@ -48,14 +48,19 @@ class MotionPlanning(Drone):
     def local_position_callback(self):
         if self.flight_state == States.TAKEOFF:
             if -1.0 * self.local_position[2] > 0.95 * self.target_position[2]:
+                print("Reached target altitude")
                 self.waypoint_transition()
         elif self.flight_state == States.WAYPOINT:
-            if np.linalg.norm(self.target_position[0:2] - self.local_position[0:2]) < 1.0:
+            # Print distance to target
+            dist_to_target = np.linalg.norm(self.target_position[0:2] - self.local_position[0:2])
+            print(f'Distance to target: {dist_to_target}')
+            if dist_to_target < 1.0:
                 if len(self.waypoints) > 0:
                     self.waypoint_transition()
                 else:
                     if np.linalg.norm(self.local_velocity[0:2]) < 1.0:
                         self.landing_transition()
+
 
     def velocity_callback(self):
         if self.flight_state == States.LANDING:
@@ -92,8 +97,17 @@ class MotionPlanning(Drone):
         print("waypoint transition")
         self.target_position = self.waypoints.pop(0)
         print('target position', self.target_position)
-        self.cmd_position(self.target_position[0], self.target_position[1], self.target_position[2], self.target_position[3])
+        # Add position logging
+        print(f'Current local position: {self.local_position}')
+        # Ensure proper command sending
+        self.cmd_position(self.target_position[0], 
+                        self.target_position[1], 
+                        self.target_position[2], 
+                        self.target_position[3])
+        # Add small delay for command processing
+        time.sleep(0.1)
 
+ 
     def landing_transition(self):
         self.flight_state = States.LANDING
         print("landing transition")
@@ -183,8 +197,10 @@ class MotionPlanning(Drone):
 
         # Convert path to waypoints
         waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in path]
+        
         # Set self.waypoints
         self.waypoints = waypoints
+        #plot_waypoints(grid, self.waypoints, north_offset, east_offset)
         print('Waypoints: ', waypoints)
         self.send_waypoints()
 
@@ -204,6 +220,6 @@ if __name__ == "__main__":
 
     conn = MavlinkConnection('tcp:{0}:{1}'.format(args.host, args.port), timeout=10000)
     drone = MotionPlanning(conn)
-    time.sleep(1)
+    time.sleep(5)
 
     drone.start()
